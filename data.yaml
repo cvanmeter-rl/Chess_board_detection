@@ -1,0 +1,14 @@
+path: chessboard_data/
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names: ['chessboard']
+
+roboflow:
+  workspace: logan-brenningmeyer
+  project: chessboard-segmentation-imxbe
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/logan-brenningmeyer/chessboard-segmentation-imxbe/dataset/1
