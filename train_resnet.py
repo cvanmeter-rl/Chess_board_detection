@@ -7,23 +7,28 @@ import pickle
 import os
 
 # -- Define data transformations
+slight_rotation = transforms.RandomRotation(degrees=(-10,10)) #rotation between -10 and 10 degrees
+slight_translation = transforms.RandomAffine(degrees=0, translate=(0.1, 0.1))  # Translate up to 10% horizontally and vertically
+
 data_transforms = transforms.Compose([
     transforms.Resize(224),  # Resize images to 224x224 pixels
     transforms.CenterCrop(224),
     transforms.ToTensor(),
+    transforms.RandomApply([slight_rotation], p = 0.5), #apply rotation 50% of the time
+    transforms.RandomApply([slight_translation], p = 0.5), #apply translation 50% of the time
     # Normalize using ImageNet's mean and standard deviation
     transforms.Normalize([0.485, 0.456, 0.406], 
                          [0.229, 0.224, 0.225])
 ])
 
 # -- Load piece chip dataset
-dataset = datasets.ImageFolder('piece_dataset', transform=data_transforms)
+dataset = datasets.ImageFolder('archive/segmented_train/', transform=data_transforms)
 
 # -- Randomly sample 40000 empty square samples to reduce dataset size
 print("Reducing empty samples...")
-empty_idx = 6
-empty_samples = 40000
-load_indices = False
+empty_idx = 0
+empty_samples = 120000
+load_indices = True
 class_indices_file = 'new_class_indices.pkl'
 
 # -- Load new_class_indices if available, otherwise generate and save them
@@ -69,7 +74,7 @@ print("\nTraining...")
 
 model.train()
 
-num_epochs = 1
+num_epochs = 10
 for epoch in range(num_epochs):
     for i, (inputs, labels) in enumerate(dataloader):
 
