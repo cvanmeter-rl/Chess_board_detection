@@ -45,7 +45,7 @@ def plot_pipeline():
 
     axs4 = fig.add_subplot(gs[3, :])
     axs4.imshow(pieces)
-    axs4.set_title('Piece Segmentation')
+    axs4.set_title('Piece Classification')
     axs4.axis('off')
 
     fig.savefig('results/pipeline.png', bbox_inches='tight', pad_inches=0, dpi=300)
@@ -67,9 +67,10 @@ def preprocess_square(square):
 
 def main():
     # -- Load YOLO11n chessboard detection model
-    print("Loading YOLO model...")
-    board_detector = YOLO('models/board_detector/epoch27.pt')
-    print("YOLO model loaded successfully.")
+    detector_model = 'epoch27.pt'
+    print(f"Loading YOLO model ({detector_model})...")
+    board_detector = YOLO(f'models/board_detector/{detector_model}')
+    print(f"YOLO model ({detector_model}) loaded successfully.")
 
     # -- Take screenshot
     print("\nTaking screenshot...")
@@ -95,7 +96,8 @@ def main():
     print(f"\nboard.shape: {board.shape}")
 
     # -- Resize/crop board to be evenly segmented into an 8x8 grid
-    board_size = round(max(board.shape[1], board.shape[0]) / 8) * 8
+    board_shape_avg = (board.shape[0] + board.shape[1]) / 2
+    board_size = round(board_shape_avg / 8) * 8
     board_resized = cv2.resize(board, (board_size, board_size))
 
     board_w, board_h = board_resized.shape[1], board_resized.shape[0]
@@ -112,29 +114,46 @@ def main():
     # -- Classify chessboard squares
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    print("\nLoading ResNet-18 model...")
-    piece_classifier = torch.load('models/piece_classifier/test_epoch0.pth', map_location=device)
-    print("ResNet-18 model loaded successfully.")
+    classifier_model = 'classifier_epoch1.pth'
+    print(f"\nLoading ResNet-18 model ({classifier_model})...")
+    piece_classifier = torch.load(f'models/piece_classifier/{classifier_model}', map_location=device)
+    print(f"ResNet-18 model ({classifier_model}) loaded successfully.")
 
     piece_classifier.to(device)
     piece_classifier.eval()
 
     square_preds = np.full((8, 8), "  ", dtype=object)
 
+    # class_map = {
+    #     0 : 'b',
+    #     1 : 'k',
+    #     2 : 'n',
+    #     3 : 'p',
+    #     4 : 'q',
+    #     5 : 'r',
+    #     6 : ' ',
+    #     7 : 'B',
+    #     8 : 'K',
+    #     9 : 'N',
+    #     10: 'P',
+    #     11: 'Q',
+    #     12: 'R'
+    # }
+
     class_map = {
-        0 : 'b',
-        1 : 'k',
-        2 : 'n',
-        3 : 'p',
-        4 : 'q',
-        5 : 'r',
-        6 : ' ',
-        7 : 'B',
-        8 : 'K',
-        9 : 'N',
-        10: 'P',
-        11: 'Q',
-        12: 'R'
+        0 : ' ',
+        1 : 'N',
+        2 : 'P',
+        3 : 'Q',
+        4 : 'R',
+        5 : 'b',
+        6 : 'k',
+        7 : 'n',
+        8 : 'p',
+        9 : 'q',
+        10: 'r',
+        11: 'B',
+        12: 'K'
     }
 
     for i in range(8):
@@ -151,6 +170,9 @@ def main():
 
     print(f"\nPiece Classifications: \n{square_preds}")
 
+    # -- Convert piece classifications to FEN
+
+
     # -- Save images
     cv2.imwrite('results/screenshot.png', cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR))
     cv2.imwrite('results/annotation.png', cv2.cvtColor(results.plot(), cv2.COLOR_RGB2BGR))
@@ -163,10 +185,12 @@ def main():
         for j in range(8):
             square = squares[i][j][0]
             axs[i][j].imshow(square)
+            axs[i][j].set_xlabel(square_preds[i][j])
             axs[i][j].set_xticks([])
             axs[i][j].set_yticks([])
 
-    fig.savefig('results/pieces.png', bbox_inches='tight', pad_inches=0.05)
+    fig.subplots_adjust(hspace=1.0, wspace=1.0)
+    fig.savefig('results/pieces.png', bbox_inches='tight')
     plt.close(fig)
 
     plot_pipeline()
