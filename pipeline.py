@@ -42,6 +42,7 @@ def preprocess_square(square):
 
     return square
 
+
 def detect_board(board_detector: YOLO, screenshot: np.ndarray) -> np.ndarray:
     '''
     Given a screenshot, detects and returns a chessboard from the
@@ -58,7 +59,7 @@ def detect_board(board_detector: YOLO, screenshot: np.ndarray) -> np.ndarray:
     detection model, cropped from the original screenshot using YOLO bounding box
     '''
     # -- Detect chessboard from screenshot
-    results = board_detector(screenshot, max_det=1)[0]
+    results = board_detector(screenshot, max_det=1, verbose=False)[0]
     bbox = results.boxes
 
     # -- If no objects are found, inform the user
@@ -71,6 +72,7 @@ def detect_board(board_detector: YOLO, screenshot: np.ndarray) -> np.ndarray:
     board = screenshot[y1 : y2 + 1, x1 : x2 + 1]
 
     return board
+
 
 def segment_board(board: np.ndarray) -> np.ndarray:
     '''
@@ -96,6 +98,7 @@ def segment_board(board: np.ndarray) -> np.ndarray:
     squares = view_as_blocks(board_resized, (square_size, square_size, 3)).squeeze()
 
     return squares
+
 
 def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray:
     '''
@@ -151,6 +154,81 @@ def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray
 
     return pieces
 
+
+def indices_to_alg(indices):
+    '''
+    Converts board indices ([0, 7], [0, 7]) to algebraic notation ([8, 1], [a, h])
+
+    Parameters:
+    - indices: Tuple of 0-indexed board position (row, col)
+
+    Returns:
+    - position: String representing a square of a board in algebraic notation
+    '''
+    row, col = indices
+
+    # -- Row (Rank)
+    rank = str(8 - row)
+
+    # -- Col (File)
+    file = chr(col + ord('a'))
+
+    # -- Concatenate file and rank
+    position = file + rank
+
+    return position
+
+
+def infer_move(pieces_1: np.ndarray, pieces_2: np.ndarray, active_color: str):
+    '''
+    Given two board states with a single move in between, infers the
+    intermediate move and returns a string in long algebraic notation:
+    - Normal Move:
+        * "<start_pos><end_pos>"
+    - Castle:
+        * "O-O" (Kingside)
+        * "O-O-O" (Queenside)
+
+    Parameters:
+    - pieces_1 (8, 8): Board position preceding the intermediate move
+    - pieces_2 (8, 8): Board position following the intermediate move
+
+    Returns:
+    - move: String of the starting/ending positions of the moved piece
+    '''
+    # -- Determine if the move is a normal move (1 new space) or a castle (2 new spaces)
+    new_empty = len(np.argwhere((pieces_1 != ' ') & (pieces_2 == ' ')))
+
+    # -- Normal Move
+    if new_empty == 1:
+        # Define move as <start_pos><end_pos> in algebraic notation
+        move_start = np.argwhere((pieces_1 != pieces_2) & (pieces_2 == ' '))[0]
+        move_end = np.argwhere((pieces_1 != pieces_2) & (pieces_2 != ' '))[0]
+
+        move = indices_to_alg(move_start) + indices_to_alg(move_end)
+
+    # -- Castle
+    elif new_empty == 2:
+        # Define rook notation for the inferred color
+        if active_color == 'w':
+            rook = 'r'
+        elif active_color == 'b':
+            rook = 'R'
+
+        # Determine number of rook moves
+        rook_start = np.argwhere((pieces_1 == rook) & (pieces_2 == ' '))[0]
+        rook_end   = np.argwhere((pieces_1 == ' ') & (pieces_2 == rook))[0]
+        rook_moves = abs(rook_end[1] - rook_start[1])
+
+        # Kingside castle if rook_moves = 2, Queenside castle if rook_moves = 3
+        if rook_moves == 2:
+            move = 'O-O'
+        elif rook_moves == 3:
+            move = 'O-O-O'
+
+    return move
+
+
 def generate_fen(stockfish: Stockfish,
                  pieces: np.ndarray, 
                  active_color: str) -> str:
@@ -197,7 +275,7 @@ def generate_fen(stockfish: Stockfish,
                         1. white/black have both moved twice
                         2. white moved 3 times/black moved 2 times (will increment on black's next move)
     '''
-    fen = ""
+    fen = []
 
     # -- Piece Notation
     piece_notation = ""
@@ -226,12 +304,12 @@ def generate_fen(stockfish: Stockfish,
         if row != 7:
             piece_notation += '/'
     
-    fen += piece_notation + ' '
+    fen.append(piece_notation)
 
     # -- Active Color
-    fen += active_color + ' '
+    fen.append(active_color)
 
-    # -- Castling Rights
+    # -- Castling Rights (must infer for other player)
     '''
     How?
     - User will set their color (White (w) or Black (b))
@@ -242,14 +320,36 @@ def generate_fen(stockfish: Stockfish,
             - 'w' -> 'b'
                 * Program recommends a move for Black, but will have to infer Black's real move on the next 'w' run
     - Inferring Black's move:
-        * 
+        * Know:
+            - Board position after white's first move (w_1 = detected board position + Stockfish move)
+            - Board position after black's move (b_1 = detected board position)
+        * Therefore, b_1 - w_1 will give you the change from black's move
+            - Standard move:
+                * A changed square where b_1 IS empty shows where black's piece came from
+                    - indices = np.where((w_1 != b_1) & (b_1 == ' '))[0]
+                * A changed square where b_1 IS NOT empty shows where black's piece went
+                    - indices = np.where((w_1 != b_1) & (b_1 != ' '))[0]
+            - Castle:
+                * Two new empty squares show that black castled
+                    - Kingside (short): Rook moves two columns
+                    - Queenside (long): Rook moves three columns
+                * Check number of columns rook moves:
+                    - rook_start = np.where((w_1 == 'r') & (b_1 == ' '))[0]
+                    - rook_end   = np.where((w_1 == ' ') & (b_1 == 'r'))[0]
+                    - rook_moves = rook_end[1] - rook_start[1]
     '''
+
 
     # -- En Passant
 
     # -- Halfmove Clock
 
     # -- Fullmove Number
+
+    # -- Concatenate FEN into space-separated string for Stockfish
+    fen_string = ' '.join(fen)
+
+    return fen_string
 
 
 def run_pipeline(board_detector: YOLO, 
@@ -265,7 +365,7 @@ def run_pipeline(board_detector: YOLO,
     screenshot = np.array(pyautogui.screenshot())
 
     # -- Detect chessboard from screenshot
-    board = detect_board(screenshot, board_detector)
+    board = detect_board(board_detector, screenshot)
 
     '''
     Classify Pieces
@@ -276,7 +376,7 @@ def run_pipeline(board_detector: YOLO,
     squares = segment_board(board)
 
     # -- Classify the piece of each square in FEN notation
-    pieces = classify_pieces(squares, piece_classifier)
+    pieces = classify_pieces(piece_classifier, squares)
 
     '''
     Recommend Move
@@ -285,8 +385,10 @@ def run_pipeline(board_detector: YOLO,
 
     # -- Determine FEN notation for current game position
     fen = generate_fen(stockfish, pieces, active_color)
+    print(fen)
 
     # -- Pass FEN notation to Stockfish to generate move recommendation
+
 
 def main():
     '''
@@ -335,6 +437,7 @@ def main():
             # Exit program on Escape
             elif key == b'\x1b':
                 break
+
 
 if __name__ == "__main__":
     main()
