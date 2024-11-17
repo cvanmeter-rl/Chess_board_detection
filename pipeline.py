@@ -275,7 +275,7 @@ def generate_fen(stockfish: Stockfish,
                         1. white/black have both moved twice
                         2. white moved 3 times/black moved 2 times (will increment on black's next move)
     '''
-    fen = []
+    fen_fields = []
 
     # -- Piece Notation
     piece_notation = ""
@@ -304,10 +304,10 @@ def generate_fen(stockfish: Stockfish,
         if row != 7:
             piece_notation += '/'
     
-    fen.append(piece_notation)
+    fen_fields.append(piece_notation)
 
     # -- Active Color
-    fen.append(active_color)
+    fen_fields.append(active_color)
 
     # -- Castling Rights (must infer for other player)
     '''
@@ -347,9 +347,9 @@ def generate_fen(stockfish: Stockfish,
     # -- Fullmove Number
 
     # -- Concatenate FEN into space-separated string for Stockfish
-    fen_string = ' '.join(fen)
+    fen = ' '.join(fen_fields)
 
-    return fen_string
+    return fen
 
 
 def run_pipeline(board_detector: YOLO, 
