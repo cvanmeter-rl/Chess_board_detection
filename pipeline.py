@@ -64,7 +64,7 @@ def detect_board(board_detector: YOLO, screenshot: np.ndarray) -> np.ndarray:
 
     # -- If no objects are found, inform the user
     if bbox.conf.numel() == 0:
-        print("\n-- No chessboards detected! --")
+        print("-- No chessboards detected! --\n")
         return None
     
     # -- Crop chessboard from screenshot using bbox
@@ -157,7 +157,8 @@ def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray
 
 def indices_to_alg(indices):
     '''
-    Converts board indices ([0, 7], [0, 7]) to algebraic notation ([8, 1], [a, h])
+    Converts board indices ([0, 7], [0, 7]) to algebraic notation ([a, h], [8, 1])
+    - e.g. (4, 4) -> "e4"
 
     Parameters:
     - indices: Tuple of 0-indexed board position (row, col)
@@ -337,14 +338,41 @@ def generate_fen(stockfish: Stockfish,
                     - rook_start = np.where((w_1 == 'r') & (b_1 == ' '))[0]
                     - rook_end   = np.where((w_1 == ' ') & (b_1 == 'r'))[0]
                     - rook_moves = rook_end[1] - rook_start[1]
+    - There are only two possibilities:
+        * User runs the pipeline only when they need it (not every turn)
+            - Unable to keep Stockfish fully updated move by move, so will have to 
+            make assumptions for castling rights, en passant, and halfmove/fullmove
+            - Castling Rights:
+                * If King or both rooks moved, no castling rights
+            - En Passant:
+                * Assume no en passant
+            - Halfmove Clock:
+                * Set to 0
+            - Fullmove Counter:
+                * Set to 1
+        * User runs the pipeline on every turn
+            - Can keep Stockfish updated on every move
+                * Input user's moves as whatever Stockfish recommends
+                * Input opponent's moves as the inferred move between the user's
     '''
 
+    '''
+    Temporarily, set castle rights='KQkq', en passant='-', halfmove=0, fullmove=1
+    '''
+    castle_rights = 'KQkq'
+    fen_fields.append(castle_rights)
 
     # -- En Passant
+    en_passant = '-'
+    fen_fields.append(en_passant)
 
     # -- Halfmove Clock
+    halfmove = str(0)
+    fen_fields.append(halfmove)
 
     # -- Fullmove Number
+    fullmove = str(1)
+    fen_fields.append(fullmove)
 
     # -- Concatenate FEN into space-separated string for Stockfish
     fen = ' '.join(fen_fields)
@@ -367,6 +395,9 @@ def run_pipeline(board_detector: YOLO,
     # -- Detect chessboard from screenshot
     board = detect_board(board_detector, screenshot)
 
+    if board is None:
+        return None
+
     '''
     Classify Pieces
     '''
@@ -385,10 +416,14 @@ def run_pipeline(board_detector: YOLO,
 
     # -- Determine FEN notation for current game position
     fen = generate_fen(stockfish, pieces, active_color)
-    print(fen)
+    print(f"FEN: {fen}")
+    print(f"FEN Valid: {stockfish.is_fen_valid(fen)}\n")
 
     # -- Pass FEN notation to Stockfish to generate move recommendation
+    stockfish.set_fen_position(fen)
+    move = stockfish.get_best_move()
 
+    return move
 
 def main():
     '''
@@ -404,7 +439,12 @@ def main():
     piece_classifier = torch.load(f'models/piece_classifier/classifier_epoch1.pth', map_location=device).eval()
 
     # -- Load Stockfish17 engine
-    stockfish = Stockfish(path='models/stockfish/stockfish-windows-x86-64-avx2')
+    stockfish = Stockfish(path='models/stockfish/stockfish-windows-x86-64-avx2',
+                          depth=18,
+                          parameters={
+                              "Threads" : 4,
+                              "Hash" : 2048,
+                              "Skill Level" : 20})
 
     print("Models successfully loaded.\n")
 
@@ -414,28 +454,17 @@ def main():
     while True:
         # -- If a key is pressed...
         if msvcrt.kbhit():
-            key = msvcrt.getch()
-            # Run pipeline for White on 'w'
-            # if key == b'w':
-            #     run_pipeline(board_detector, 
-            #                  piece_classifier, 
-            #                  stockfish,
-            #                  active_color='w')
-            # # Run pipeline for Black on 'b'
-            # elif key == b'b':
-            #     run_pipeline(board_detector,
-            #                  piece_classifier,
-            #                  stockfish,
-            #                  active_color='b')
-
-            # Run pipeline on Enter
-            if key == b'\r':
-                run_pipeline(board_detector, 
-                             piece_classifier, 
-                             stockfish,
-                             active_color='w')
+            key = msvcrt.getwch().lower()
+            # Run pipeline for White on 'w'/Black on 'b'
+            if key == 'w' or key == 'b':
+                move = run_pipeline(board_detector, 
+                                    piece_classifier, 
+                                    stockfish,
+                                    active_color=key)
+                
+                print(f"{'White' if key == 'w' else 'Black'} move: {move}\n")
             # Exit program on Escape
-            elif key == b'\x1b':
+            elif key == '\x1b':
                 break
 
 
