@@ -155,7 +155,7 @@ def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray
     return pieces
 
 
-def indices_to_alg(indices):
+def indices_to_alg(indices: tuple, user_color: str):
     '''
     Converts board indices ([0, 7], [0, 7]) to algebraic notation ([a, h], [8, 1])
     - e.g. (4, 4) -> "e4"
@@ -169,10 +169,16 @@ def indices_to_alg(indices):
     row, col = indices
 
     # -- Row (Rank)
-    rank = str(8 - row)
+    if user_color == 'w':
+        rank = str(8 - row)
+    elif user_color == 'b':
+        rank = str(row + 1)
 
     # -- Col (File)
-    file = chr(col + ord('a'))
+    if user_color == 'w':
+        file = chr(col + ord('a'))
+    elif user_color == 'b':
+        file = chr(ord('h') - col)
 
     # -- Concatenate file and rank
     position = file + rank
