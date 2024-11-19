@@ -100,7 +100,7 @@ def segment_board(board: np.ndarray) -> np.ndarray:
     return squares
 
 
-def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray:
+def classify_pieces(piece_classifier: ResNet, squares: np.ndarray, user_color: str) -> np.ndarray:
     '''
     Given an array of segmented chessboard squares in the shape:
     - (8, 8, square_size, square_size, 3)
@@ -152,10 +152,95 @@ def classify_pieces(piece_classifier: ResNet, squares: np.ndarray) -> np.ndarray
             # Store FEN classification in pieces array
             pieces[i][j] = class_map[int(pred)]
 
+    # -- If Black is on bottom (user_color == 'b'), flip the board
+    if user_color == 'b':
+        pieces = pieces[::-1, ::-1]
+
     return pieces
 
 
-def indices_to_alg(indices: tuple, user_color: str):
+def array_to_fen(pieces: np.ndarray):
+    '''
+    Converts numpy array of pieces to a FEN position string
+
+    Parameters:
+    - pieces (8, 8): Chessboard position
+
+    Returns:
+    - fen_position: String of FEN notation compatible with Stockfish
+    '''
+    # -- Piece Notation
+    fen_position = ""
+
+    for row in range(pieces.shape[0]):
+        num_empty = 0
+
+        for piece in pieces[row]:
+            # Count consecutive empty squares
+            if piece == ' ':
+                num_empty += 1
+            # On an initial non-empty square, record num_empty first
+            elif num_empty > 0:
+                fen_position += str(num_empty)
+                fen_position += piece
+                num_empty = 0
+            # Otherwise, simply record piece notation
+            else:
+                fen_position += piece
+
+        # Include final consecutive empty squares
+        if num_empty > 0:
+            fen_position += str(num_empty)
+
+        # Separate rows with slashes (/)
+        if row != 7:
+            fen_position += '/'
+
+    return fen_position
+
+
+def fen_to_array(fen: str):
+    '''
+    Converts string FEN board position to a numpy array where 
+    pieces are written in FEN and empty squares are ' '
+
+    Parameters:
+    - fen: String of FEN notation compatible with Stockfish
+
+    Returns:
+    - pieces (8, 8): Chessboard position
+    '''
+    # -- Extract board position from FEN
+    fen_position = fen.split(' ')[0]
+    fen_rows = fen_position.split('/')
+
+    # -- Initialize empty pieces array
+    pieces = np.full((8, 8), fill_value=' ', dtype=object)
+
+    # -- Copy FEN position to pieces array
+    for row_idx, row in enumerate(fen_rows):
+        # Character index of row string
+        chr_idx = 0
+        # Column index of pieces array
+        col_idx = 0
+
+        while col_idx < 8:
+            piece = row[chr_idx]
+            # A letter implies a piece
+            if piece.isalpha():
+                pieces[row_idx][col_idx] = piece
+                col_idx += 1
+            # A digit n implies n consecutive empty squares
+            elif piece.isdigit():
+                pieces[row_idx][col_idx : col_idx + int(piece)] = [' '] * int(piece)
+                col_idx += int(piece)
+            # Increment through row string
+            chr_idx += 1
+
+    return pieces
+
+
+def indices_to_alg(indices: tuple):
     '''
     Converts board indices ([0, 7], [0, 7]) to algebraic notation ([a, h], [8, 1])
     - e.g. (4, 4) -> "e4"
@@ -169,16 +254,10 @@ def indices_to_alg(indices: tuple, user_color: str):
     row, col = indices
 
     # -- Row (Rank)
-    if user_color == 'w':
-        rank = str(8 - row)
-    elif user_color == 'b':
-        rank = str(row + 1)
+    rank = str(8 - row)
 
     # -- Col (File)
-    if user_color == 'w':
-        file = chr(col + ord('a'))
-    elif user_color == 'b':
-        file = chr(ord('h') - col)
+    file = chr(col + ord('a'))
 
     # -- Concatenate file and rank
     position = file + rank
@@ -186,15 +265,42 @@ def indices_to_alg(indices: tuple, user_color: str):
     return position
 
 
+def infer_castling(pieces: np.ndarray):
+    '''
+    Given a board state as an array, infer if White/Black have
+    kingside/queenside castling rights based on the positions of 
+    their kings and rooks
+    - If King/Rook(s) are in initial positions, they have castling rights
+    '''
+    w_castle = ""
+    b_castle = ""
+
+    # -- White
+    if pieces[7][4] == 'K':
+        if pieces[7][7] == 'R':
+            w_castle += 'K'
+        if pieces[7][0] == 'R':
+            w_castle += 'Q'
+
+    # -- Black
+    if pieces[0][4] == 'k':
+        if pieces[0][7] == 'r':
+            b_castle += 'k'
+        if pieces[0][0] == 'r':
+            b_castle += 'q'
+
+    if not w_castle and not b_castle:
+        return '-'
+    else:
+        return w_castle + b_castle
+
+
 def infer_move(pieces_1: np.ndarray, pieces_2: np.ndarray, active_color: str):
     '''
     Given two board states with a single move in between, infers the
     intermediate move and returns a string in long algebraic notation:
-    - Normal Move:
+    - Move:
         * "<start_pos><end_pos>"
-    - Castle:
-        * "O-O" (Kingside)
-        * "O-O-O" (Queenside)
 
     Parameters:
     - pieces_1 (8, 8): Board position preceding the intermediate move
@@ -203,6 +309,13 @@ def infer_move(pieces_1: np.ndarray, pieces_2: np.ndarray, active_color: str):
     Returns:
     - move: String of the starting/ending positions of the moved piece
     '''
+    # -- If the two boards are identical, return 'none'
+    if (pieces_1 == pieces_2).all():
+        return 'none'
+
+    # -- Define inactive color
+    inactive_color = 'b' if active_color == 'w' else 'w'
+
     # -- Determine if the move is a normal move (1 new space) or a castle (2 new spaces)
     new_empty = len(np.argwhere((pieces_1 != ' ') & (pieces_2 == ' ')))
 
@@ -216,180 +329,97 @@ def infer_move(pieces_1: np.ndarray, pieces_2: np.ndarray, active_color: str):
 
     # -- Castle
     elif new_empty == 2:
-        # Define rook notation for the inferred color
-        if active_color == 'w':
-            rook = 'r'
-        elif active_color == 'b':
+        # Define rook notation for the inferred (inactive) color
+        if inactive_color == 'w':
             rook = 'R'
+        elif inactive_color == 'b':
+            rook = 'r'
+
+        # Determine start/end rook positions
+        rook_start = np.argwhere((pieces_1 == rook) & (pieces_2 == ' '))
+        rook_end   = np.argwhere((pieces_1 == ' ') & (pieces_2 == rook))
+        
+        # If there are two moved pieces but no rooks, there are multiple unknown moves
+        if rook_start.size == 0 or rook_end.size == 0:
+            return 'mult'
 
         # Determine number of rook moves
-        rook_start = np.argwhere((pieces_1 == rook) & (pieces_2 == ' '))[0]
-        rook_end   = np.argwhere((pieces_1 == ' ') & (pieces_2 == rook))[0]
-        rook_moves = abs(rook_end[1] - rook_start[1])
+        rook_moves = abs(rook_end[0][1] - rook_start[0][1])
 
-        # Kingside castle if rook_moves = 2, Queenside castle if rook_moves = 3
+        # Kingside castle if rook_moves = 2
         if rook_moves == 2:
-            move = 'O-O'
+            if inactive_color == 'w':
+                move = 'e1g1'
+            elif inactive_color == 'b':
+                move = 'e8g8'
+        # Queenside castle if rook_moves = 3
         elif rook_moves == 3:
-            move = 'O-O-O'
+            if inactive_color == 'w':
+                move = 'e1c1'
+            elif inactive_color == 'b':
+                move = 'e8c8'
+
+    # -- 3+ empty squares means there was multiple moves
+    else:
+        return 'mult'
 
     return move
 
 
-def generate_fen(stockfish: Stockfish,
-                 pieces: np.ndarray, 
-                 active_color: str) -> str:
+def update_stockfish(stockfish: Stockfish,
+                     pieces: np.ndarray, 
+                     active_color: str,
+                     user_color: str):
     '''
-    Converts 8x8 array of piece classifications to FEN notation
-    for compatibility with Stockfish
-
-    Parameters:
-    - pieces (8, 8): Numpy array of strings classifying each
-    square as a piece or empty according to FEN notation
+    Given the array of classified pieces, update stockfish's internal gamestate
 
     Returns:
-    - fen: String of FEN notation compatible with Stockfish (6 required terms)
-        * Example:
-            - "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
-            - "<piece notation> <active color> <castling rights> <en passant> <halfmove clock> <fullmove number>" 
-        * Definitions:
-            - <piece notation>:
-                * Piece notation left to right per row (black lowercase, white uppercase)
-                * Consecutive empty squares designated by numbers (e.g. 3 = 3 empty in a row)
-                * Rows separated by '/' (for Stockfish API)
-            - <active color>
-                * Lowercase w for white's turn, lowercase b for black's turn
-            - <castling rights>
-                1. Uppercase KQ for white's kingside and queenside castling rights, respectively
-                2. Lowercase kq for black's kingside and queenside castling rights, respectively
-                * Cannot castle if castled previously or if king moves through/into check
-            - <en passant>
-                * Explanation:
-                    - A pawn is eligible for an en passant capture on the current move iff it moved 
-                    two squares on the *previous* turn
-                        - Therefore, only one pawn is eligible to be en passant captured per move
-                    - e.g. white's pawn moves e2->e4, black can only en passant white's pawn on its *next move*
-                * Notation:
-                    - The square behind the pawn eligible for en passant capture
-                        * e.g. pawn moves e2->e4, <en passant> = e3
-            - <halfmove clock>
-                * How many moves *both* players have made since the last pawn move
-                or piece capture (any pawn move, any piece capturing any other piece)
-                    - Used to enforce the 50-move draw rule (halfmove counter = 100; 50 moves each)
-            - <fullmove number>
-                * The number of *completed* turns in the game; incremented by one every time black moves
-                    - e.g. <fullmove number> = 2 means either:
-                        1. white/black have both moved twice
-                        2. white moved 3 times/black moved 2 times (will increment on black's next move)
+    - apply_move (bool): Boolean stating if the move produced by Stockfish should
+    be applied to Stockfish's gamestate, i.e. if Stockfish is certain to be updated fully
+        * False if opponent is active_color (can't know their real move)
+        * 
     '''
-    fen_fields = []
+    # -- Read Stockfish FEN as string and array
+    fen = stockfish.get_fen_position()
+    fen_pieces = fen_to_array(fen)
 
-    # -- Piece Notation
-    piece_notation = ""
-
-    for row in range(pieces.shape[0]):
-        num_empty = 0
-
-        for piece in pieces[row]:
-            # Count consecutive empty squares
-            if piece == ' ':
-                num_empty += 1
-            # On an initial non-empty square, record num_empty first
-            elif num_empty > 0:
-                piece_notation += str(num_empty)
-                piece_notation += piece
-                num_empty = 0
-            # Otherwise, simply record piece notation
-            else:
-                piece_notation += piece
-
-        # Include final consecutive empty squares
-        if num_empty > 0:
-            piece_notation += str(num_empty)
-
-        # Separate rows with slashes (/)
-        if row != 7:
-            piece_notation += '/'
+    # -- If it is the opponent's move, do not apply_move to Stockfish (real move is unknown)
+    if active_color != user_color:
+        return False
     
-    fen_fields.append(piece_notation)
+    # -- If it is the first move (fullmove=1, active_color=White, fen_pieces & pieces match), apply_move to Stockfish
+    if (fen.split(' ')[-1] == '1' and active_color == 'w' and (fen_pieces==pieces).all()):
+        return True
+    
+    # -- Otherwise, you must update stockfish by inferring the opponent's move
+    opp_move = infer_move(pieces_1=fen_pieces,
+                          pieces_2=pieces,
+                          active_color=active_color)
+    
+    # -- If no move can be inferred, there must have been 0 moves (double run) or multiple
+    # 0 moves, do not apply_move to Stockfish
+    if opp_move == 'none':
+        return False
+    # Multiple moves, update Stockfish position and apply_move to Stockfish (revoke castling rights)
+    elif opp_move == 'mult':
+        fen_position = array_to_fen(pieces)
+        castling = infer_castling(pieces)
 
-    # -- Active Color
-    fen_fields.append(active_color)
+        stockfish.set_fen_position(f"{fen_position} {active_color} {castling} - 0 2")
 
-    # -- Castling Rights (must infer for other player)
-    '''
-    How?
-    - User will set their color (White (w) or Black (b))
-    - Assume (really required) that users will run the pipeline *at least* once per "turn" (White move and Black move)
-        * Two scenarios (let user's color = 'w'):
-            - 'w' -> 'w'
-                * Program must infer Black's move that occurred between
-            - 'w' -> 'b'
-                * Program recommends a move for Black, but will have to infer Black's real move on the next 'w' run
-    - Inferring Black's move:
-        * Know:
-            - Board position after white's first move (w_1 = detected board position + Stockfish move)
-            - Board position after black's move (b_1 = detected board position)
-        * Therefore, b_1 - w_1 will give you the change from black's move
-            - Standard move:
-                * A changed square where b_1 IS empty shows where black's piece came from
-                    - indices = np.where((w_1 != b_1) & (b_1 == ' '))[0]
-                * A changed square where b_1 IS NOT empty shows where black's piece went
-                    - indices = np.where((w_1 != b_1) & (b_1 != ' '))[0]
-            - Castle:
-                * Two new empty squares show that black castled
-                    - Kingside (short): Rook moves two columns
-                    - Queenside (long): Rook moves three columns
-                * Check number of columns rook moves:
-                    - rook_start = np.where((w_1 == 'r') & (b_1 == ' '))[0]
-                    - rook_end   = np.where((w_1 == ' ') & (b_1 == 'r'))[0]
-                    - rook_moves = rook_end[1] - rook_start[1]
-    - There are only two possibilities:
-        * User runs the pipeline only when they need it (not every turn)
-            - Unable to keep Stockfish fully updated move by move, so will have to 
-            make assumptions for castling rights, en passant, and halfmove/fullmove
-            - Castling Rights:
-                * If King or both rooks moved, no castling rights
-            - En Passant:
-                * Assume no en passant
-            - Halfmove Clock:
-                * Set to 0
-            - Fullmove Counter:
-                * Set to 1
-        * User runs the pipeline on every turn
-            - Can keep Stockfish updated on every move
-                * Input user's moves as whatever Stockfish recommends
-                * Input opponent's moves as the inferred move between the user's
-    '''
+        return True
+    
+    # -- If a move can be inferred, update Stockfish's game state and apply_move 
+    stockfish.make_moves_from_current_position([opp_move])
 
-    '''
-    Temporarily, set castle rights='KQkq', en passant='-', halfmove=0, fullmove=1
-    '''
-    castle_rights = 'KQkq'
-    fen_fields.append(castle_rights)
-
-    # -- En Passant
-    en_passant = '-'
-    fen_fields.append(en_passant)
-
-    # -- Halfmove Clock
-    halfmove = str(0)
-    fen_fields.append(halfmove)
-
-    # -- Fullmove Number
-    fullmove = str(1)
-    fen_fields.append(fullmove)
-
-    # -- Concatenate FEN into space-separated string for Stockfish
-    fen = ' '.join(fen_fields)
-
-    return fen
+    return True
 
 
 def run_pipeline(board_detector: YOLO, 
                  piece_classifier: ResNet, 
                  stockfish: Stockfish,
-                 active_color: str):
+                 active_color: str,
+                 user_color: str):
     '''
     Detect Chessboard
     '''
@@ -413,21 +443,23 @@ def run_pipeline(board_detector: YOLO,
     squares = segment_board(board)
 
     # -- Classify the piece of each square in FEN notation
-    pieces = classify_pieces(piece_classifier, squares)
+    pieces = classify_pieces(piece_classifier, squares, user_color)
 
     '''
     Recommend Move
     '''
     print("Recommending a move...\n")
 
-    # -- Determine FEN notation for current game position
-    fen = generate_fen(stockfish, pieces, active_color)
-    print(f"FEN: {fen}")
-    print(f"FEN Valid: {stockfish.is_fen_valid(fen)}\n")
+    # -- If applicable, update Stockfish to the current position by inferring the opponent's move
+    apply_move = update_stockfish(stockfish, pieces, active_color, user_color)
 
-    # -- Pass FEN notation to Stockfish to generate move recommendation
-    stockfish.set_fen_position(fen)
+    # -- Generate the best move from Stockfish
     move = stockfish.get_best_move()
+
+    # -- If apply_move == True, apply the move to Stockfish's game state
+    if apply_move:
+        stockfish.make_moves_from_current_position([move])
+        print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
 
     return move
 
@@ -445,30 +477,42 @@ def main():
     piece_classifier = torch.load(f'models/piece_classifier/classifier_epoch1.pth', map_location=device).eval()
 
     # -- Load Stockfish17 engine
-    stockfish = Stockfish(path='models/stockfish/stockfish-windows-x86-64-avx2',
-                          depth=18,
-                          parameters={
-                              "Threads" : 4,
-                              "Hash" : 2048,
-                              "Skill Level" : 20})
+    stockfish = Stockfish(
+        path='models/stockfish/stockfish-windows-x86-64-avx2',
+        depth=18,
+        parameters={
+            "Threads" : 4,
+            "Hash" : 2048,
+            "Skill Level" : 20
+        }
+    )
 
     print("Models successfully loaded.\n")
 
     '''
     Run pipeline on Enter, exit on Escape
     '''
+    user_color = input('Input your color (w/b): ')
+
+    print(f"\n---- You are playing as {'White' if user_color == 'w' else 'Black'} ----\n")
+
+    print("---- Hit 'w' to recommend a move for White, 'b' to recommend a move for Black ----\n")
+
     while True:
         # -- If a key is pressed...
         if msvcrt.kbhit():
             key = msvcrt.getwch().lower()
             # Run pipeline for White on 'w'/Black on 'b'
             if key == 'w' or key == 'b':
+                print(f"-------- {{Fullmove {stockfish.get_fen_position().split(' ')[-1]}}} --------\n")
+
                 move = run_pipeline(board_detector, 
                                     piece_classifier, 
                                     stockfish,
-                                    active_color=key)
+                                    active_color=key,
+                                    user_color=user_color)
                 
-                print(f"{'White' if key == 'w' else 'Black'} move: {move}\n")
+                print(f"----> {'White' if key == 'w' else 'Black'} Move: {move}\n")
             # Exit program on Escape
             elif key == '\x1b':
                 break
