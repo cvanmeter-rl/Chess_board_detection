@@ -405,7 +405,7 @@ def update_stockfish(stockfish: Stockfish,
         fen_position = array_to_fen(pieces)
         castling = infer_castling(pieces)
 
-        stockfish.set_fen_position(f"{fen_position} {active_color} {castling} - 0 2")
+        stockfish.set_fen_position(f"{fen_position} {active_color} {castling} - 0 1")
 
         return True
     
@@ -462,6 +462,7 @@ def run_pipeline(board_detector: YOLO,
         print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
 
     return move
+
 
 def main():
     '''
