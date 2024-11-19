@@ -1,7 +1,6 @@
 import cv2
 from PIL import Image
 import numpy as np
-import time
 # -- PyTorch
 from torchvision import transforms
 import torch
@@ -396,11 +395,11 @@ def update_stockfish(stockfish: Stockfish,
                           pieces_2=pieces,
                           active_color=active_color)
     
-    # -- If no move can be inferred, there must have been 0 moves (double run) or multiple
-    # 0 moves, do not apply_move to Stockfish
+    # -- If there is no change in the board, it must be a double run (do not apply_move)
     if opp_move == 'none':
         return False
-    # Multiple moves, update Stockfish position and apply_move to Stockfish (revoke castling rights)
+    
+    # -- Multiple moves so inferring isn't possible, update Stockfish position/castling and apply_move to Stockfish
     elif opp_move == 'mult':
         fen_position = array_to_fen(pieces)
         castling = infer_castling(pieces)
@@ -410,9 +409,10 @@ def update_stockfish(stockfish: Stockfish,
         return True
     
     # -- If a move can be inferred, update Stockfish's game state and apply_move 
-    stockfish.make_moves_from_current_position([opp_move])
+    else:
+        stockfish.make_moves_from_current_position([opp_move])
 
-    return True
+        return True
 
 
 def run_pipeline(board_detector: YOLO, 
