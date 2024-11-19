@@ -479,8 +479,8 @@ def main():
 
     # -- Load Stockfish17 engine
     stockfish = Stockfish(
-        path='models/stockfish/stockfish-windows-x86-64-avx2',
-        depth=18,
+        path='models/stockfish/stockfish-windows-x86-64-avx2.exe',
+        depth=24,
         parameters={
             "Threads" : 4,
             "Hash" : 2048,
@@ -497,23 +497,35 @@ def main():
 
     print(f"\n---- You are playing as {'White' if user_color == 'w' else 'Black'} ----\n")
 
-    print("---- Hit 'w' to recommend a move for White, 'b' to recommend a move for Black ----\n")
+    print(f"---- Hit Enter to recommend a move for yourself ({'White' if user_color == 'w' else 'Black'}) ----") 
+    print(f"---- Hit Space to recommend a move for your opponent ({'White' if user_color == 'w' else 'Black'} ----\n")
 
     while True:
         # -- If a key is pressed...
         if msvcrt.kbhit():
             key = msvcrt.getwch().lower()
-            # Run pipeline for White on 'w'/Black on 'b'
-            if key == 'w' or key == 'b':
+            # Hit Enter to run pipeline for user_color
+            if key == '\r':
                 print(f"-------- {{Fullmove {stockfish.get_fen_position().split(' ')[-1]}}} --------\n")
 
                 move = run_pipeline(board_detector, 
                                     piece_classifier, 
                                     stockfish,
-                                    active_color=key,
+                                    active_color=user_color,
                                     user_color=user_color)
                 
-                print(f"----> {'White' if key == 'w' else 'Black'} Move: {move}\n")
+                print(f"----> {'White' if user_color == 'w' else 'Black'} Move: {move}\n")
+            # Hit Space to run pipeline for opponent's color
+            elif key == ' ':
+                print(f"-------- {{Fullmove {stockfish.get_fen_position().split(' ')[-1]}}} --------\n")
+
+                move = run_pipeline(board_detector, 
+                                    piece_classifier, 
+                                    stockfish,
+                                    active_color='b' if user_color == 'w' else 'w',
+                                    user_color=user_color)
+                
+                print(f"----> {'White' if user_color == 'w' else 'Black'} Move: {move}\n")
             # Exit program on Escape
             elif key == '\x1b':
                 break
