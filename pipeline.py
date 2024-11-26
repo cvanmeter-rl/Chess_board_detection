@@ -495,10 +495,10 @@ def main():
     '''
     user_color = input('Input your color (w/b): ')
 
-    print(f"\n---- You are playing as {'White' if user_color == 'w' else 'Black'} ----\n")
+    print(f"\n-------- You are playing as ({'White' if user_color == 'w' else 'Black'}) --------\n")
 
-    print(f"---- Hit Enter to recommend a move for yourself ({'White' if user_color == 'w' else 'Black'}) ----") 
-    print(f"---- Hit Space to recommend a move for your opponent ({'White' if user_color == 'w' else 'Black'} ----\n")
+    print(f"-- Hit <Enter> to recommend a move for yourself ({'White' if user_color == 'w' else 'Black'})") 
+    print(f"-- Hit <Space> to recommend a move for your opponent ({'Black' if user_color == 'w' else 'White'})\n")
 
     while True:
         # -- If a key is pressed...
@@ -525,7 +525,7 @@ def main():
                                     active_color='b' if user_color == 'w' else 'w',
                                     user_color=user_color)
                 
-                print(f"----> {'White' if user_color == 'w' else 'Black'} Move: {move}\n")
+                print(f"----> {'Black' if user_color == 'w' else 'White'} Move: {move}\n")
             # Exit program on Escape
             elif key == '\x1b':
                 break
