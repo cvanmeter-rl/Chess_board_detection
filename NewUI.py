@@ -1,29 +1,30 @@
 import sys
-from PyQt5.QtWidgets import QLabel,QGridLayout,QApplication, QMainWindow, QPushButton, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,QCheckBox
+from PyQt5.QtWidgets import (QLabel, QGridLayout, QApplication, QMainWindow, QPushButton, QTextEdit,
+                             QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap
 
 black_side = [
-    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],  
-    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],  
-    ['.', '.', '.', '.', '.', '.', '.', '.'],  
-    ['.', '.', '.', '.', '.', '.', '.', '.'],  
-    ['.', '.', '.', '.', '.', '.', '.', '.'],  
-    ['.', '.', '.', '.', '.', '.', '.', '.'],  
-    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],  
-    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],  
+    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
 ]
 
 white_side = [
-            ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-            ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-            ['.', '.', '.', '.', '.', '.', '.', '.'],
-            ['.', '.', '.', '.', '.', '.', '.', '.'],
-            ['.', '.', '.', '.', '.', '.', '.', '.'],
-            ['.', '.', '.', '.', '.', '.', '.', '.'],
-            ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-            ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-        ]
+    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+]
 
 class ChessBoardWidget(QWidget):
     def __init__(self):
@@ -38,6 +39,13 @@ class ChessBoardWidget(QWidget):
         self.squares = [[None for _ in range(8)] for _ in range(8)]
         self.create_board()
 
+        # Set fixed size to prevent expansion
+        self.setFixedSize(480, 480)  # 8 squares * 60 pixels each
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Set initial board
+        self.update_board(white_side)
+
     def create_board(self):
         """Initialize the 8x8 chessboard with alternating colors."""
         for row in range(8):
@@ -45,7 +53,7 @@ class ChessBoardWidget(QWidget):
                 square = QLabel()
                 square.setFixedSize(60, 60)
                 square.setFrameStyle(QLabel.NoFrame)
-                
+
                 # Alternate square colors
                 if (row + col) % 2 == 0:
                     square.setStyleSheet("""
@@ -66,7 +74,7 @@ class ChessBoardWidget(QWidget):
                 self.grid_layout.addWidget(square, row, col)
                 self.squares[row][col] = square
 
-    def update_board(self,board):
+    def update_board(self, board):
         """
         Update the chessboard based on the given board positions.
 
@@ -99,9 +107,9 @@ class ChessBoardWidget(QWidget):
                 if piece != '.':
                     # Load the corresponding piece image
                     pixmap = QPixmap(piece_images[piece])
-                    pixmap = pixmap.scaled(60, 45, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)  # Adjusted size
                     square.setPixmap(pixmap)
-                    square.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+                    square.setAlignment(Qt.AlignCenter)  # Center both horizontally and vertically
                 else:
                     square.clear()  # Clear the square if empty
 
@@ -111,47 +119,51 @@ class MainWindow(QMainWindow):
 
         # Set up the window
         self.setWindowTitle("Chess Move Recommender")
-        self.setGeometry(800, 400, 600, 600) #xpos,ypos,width,height
+        self.setGeometry(800, 400, 600, 800)  # Increased height
 
-        self.setFixedSize(600,600) #set window to fixed size, width, height
+        self.setMinimumSize(600, 800)  # Allow the window to be at least 600x800
 
         # Create main widget and layout
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)  # Top, Left, Bottom, Right margins
-        #layout.setSpacing(5)  # Space between widgets
-        layout.addStretch(0)
-        central_widget.setLayout(layout)
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)  # Added margins for better spacing
+        main_layout.setSpacing(10)  # Space between widgets
+        central_widget.setLayout(main_layout)
 
-        #create toggle button
+        # Create toggle button layout
         toggle_layout = QHBoxLayout()
         self.toggle_button = QPushButton("White Pieces", self)
         self.toggle_button.setCheckable(True)  # Enable toggle functionality
         self.toggle_button.setStyleSheet("background-color: white; color: black;border: 1px solid #555555;")  # Initial color
         self.toggle_button.setFixedWidth(200)
-        toggle_layout.addWidget(self.toggle_button,alignment=Qt.AlignTop | Qt.AlignHCenter)
-        layout.addLayout(toggle_layout)
+        toggle_layout.addStretch()  # Add stretch to center the toggle button horizontally
+        toggle_layout.addWidget(self.toggle_button)
+        toggle_layout.addStretch()
+        main_layout.addLayout(toggle_layout)
 
-        #create move buttons
+        # Create move buttons layout
         self.oppPredMoveButton = QPushButton("Predict Opponent Move")
         self.oppPredMoveButton.setFixedHeight(75)
 
         self.predMoveButton = QPushButton("Get Recommended Move")
         self.predMoveButton.setFixedHeight(75)
 
-        # Create horizontal layout for buttons
+        # Create horizontal layout for move buttons
         button_layout = QHBoxLayout()
+        button_layout.addStretch()
         button_layout.addWidget(self.predMoveButton)
         button_layout.addWidget(self.oppPredMoveButton)
-        layout.addLayout(button_layout)
+        button_layout.addStretch()
+        main_layout.addLayout(button_layout)
 
-        #add chessboard widget
-
+        # Add chessboard widget with centering
+        chessboard_layout = QHBoxLayout()
+        chessboard_layout.addStretch()
         self.chessboard = ChessBoardWidget()
-        layout.addWidget(self.chessboard)
-
-        self.chessboard.update_board(white_side)
+        chessboard_layout.addWidget(self.chessboard)
+        chessboard_layout.addStretch()
+        main_layout.addLayout(chessboard_layout)
 
         # Create output area (read-only text area)
         reccMove_boxes_layout = QHBoxLayout()
@@ -173,8 +185,7 @@ class MainWindow(QMainWindow):
         self.move3.setPlaceholderText("3rd Move:")
         reccMove_boxes_layout.addWidget(self.move3)
 
-
-        layout.addLayout(reccMove_boxes_layout)
+        main_layout.addLayout(reccMove_boxes_layout)
 
         # Connect buttons to methods
         self.oppPredMoveButton.clicked.connect(self.getOppPredictedMove)
@@ -184,27 +195,25 @@ class MainWindow(QMainWindow):
         self.toggle_button.toggled.connect(self.toggle_state)
 
     def toggle_state(self, checked):
-        if checked: #black pieces
+        if checked:  # Black pieces
             self.chessboard.update_board(black_side)
             self.toggle_button.setText("Black Pieces")
-            self.toggle_button.setStyleSheet("background-color: #3C3F41; color: white;border: 1px solid #555555;")  # Initial color
-        else: #white pieces
+            self.toggle_button.setStyleSheet("background-color: #3C3F41; color: white;border: 1px solid #555555;")  # Updated color
+        else:  # White pieces
             self.chessboard.update_board(white_side)
             self.toggle_button.setText("White Pieces")
             self.toggle_button.setStyleSheet("background-color: white; color: black;border: 1px solid #555555;")  # Initial color
+
     # Methods for button actions
     def getOppPredictedMove(self):
         self.move1.setText("You clicked Opp pred move!")
         self.move2.setText("You clicked Opp pred move!")
         self.move3.setText("You clicked Opp pred move!")
-    
+
     def getPredictedMove(self):
         self.move1.setText("You clicked predicted move!")
         self.move2.setText("You clicked predicted move!")
-        self.move3.setText("You clicked predicted move!")
-
-
-
+        self.move3.setText("You clicked predicted move()")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
