@@ -22,29 +22,29 @@ import pyautogui
 from skimage.util import view_as_blocks
 import msvcrt
 
-current_color = 'w' #keeps track of users piece color
+# current_color = 'w' #keeps track of users piece color
 
-black_side = [
-    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-]
+# black_side = [
+#     ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+#     ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+#     ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+# ]
 
-white_side = [
-    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-]
+# white_side = [
+#     ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+#     ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+#     ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+#     ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+# ]
 
 class ChessBoardWidget(QWidget):
     def __init__(self):
@@ -63,8 +63,19 @@ class ChessBoardWidget(QWidget):
         self.setFixedSize(480, 480)  # 8 squares * 60 pixels each
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        # Set initial board
-        self.update_board(white_side)
+        # Set initial board (white side)
+        self.pieces = np.array([
+            ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+            ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+        ])
+
+        self.update_board(self.pieces)
 
     def create_board(self):
         """Initialize the 8x8 chessboard with alternating colors."""
@@ -93,6 +104,12 @@ class ChessBoardWidget(QWidget):
                 # Add square to the grid layout
                 self.grid_layout.addWidget(square, row, col)
                 self.squares[row][col] = square
+
+
+    def flip_board(self):
+        self.pieces = self.pieces[::-1, ::-1]
+        self.update_board(self.pieces)
+
 
     def update_board(self, board):
         """
@@ -136,6 +153,8 @@ class ChessBoardWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        self.current_color = 'w'
 
         # Set up the window
         self.setWindowTitle("Chess Move Recommender")
@@ -214,51 +233,104 @@ class MainWindow(QMainWindow):
         # Connect toggle signal
         self.toggle_button.toggled.connect(self.toggle_state)
 
+
+    def is_first_move(self):
+        '''
+        Checks if the current chessboard position (pieces) is on the first move,
+        allowing the user to change their color before the game
+        '''
+        white_board = np.array([
+            ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+            ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+        ])
+
+        black_board = np.array([
+            ['R', 'N', 'B', 'K', 'Q', 'B', 'N', 'R'],
+            ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+            ['r', 'n', 'b', 'k', 'q', 'b', 'n', 'r'],
+        ])
+
+        if np.all(self.chessboard.pieces == white_board) or np.all(self.chessboard.pieces == black_board):
+            return True
+        else:
+            print(f"chessboard.pieces: {self.chessboard.pieces}")
+            return False
+
+
+
     def toggle_state(self, checked):
 
-        if checked:  # Black pieces
-            current_color = 'b'
-            self.chessboard.update_board(black_side)
-            self.toggle_button.setText("Black Pieces")
-            self.toggle_button.setStyleSheet("background-color: #3C3F41; color: white;border: 1px solid #555555;")  # Updated color
-        else:  # White pieces
-            current_color = 'w'
-            self.chessboard.update_board(white_side)
-            self.toggle_button.setText("White Pieces")
-            self.toggle_button.setStyleSheet("background-color: white; color: black;border: 1px solid #555555;")  # Initial color
+        if self.is_first_move():
+            if checked:  # Black pieces
+                self.current_color = 'b'
+                self.chessboard.flip_board()
+                # self.chessboard.update_board(black_side)
+                self.toggle_button.setText("Black Pieces")
+                self.toggle_button.setStyleSheet("background-color: #3C3F41; color: white;border: 1px solid #555555;")  # Updated color
+            else:  # White pieces
+                self.current_color = 'w'
+                self.chessboard.flip_board()
+                # self.chessboard.update_board(white_side)
+                self.toggle_button.setText("White Pieces")
+                self.toggle_button.setStyleSheet("background-color: white; color: black;border: 1px solid #555555;")  # Initial color
 
     # Methods for button actions
     def getOppPredictedMove(self):
         stockfish.get_fen_position().split(' ')[-1]
 
-        move,pieces = pipeline.run_pipeline(board_detector, 
+        moves, pieces = pipeline.run_pipeline(board_detector, 
                                      piece_classifier, 
                                      stockfish,
-                                     active_color='b' if current_color == 'w' else 'w',
-                                     user_color=current_color)
+                                     active_color='b' if self.current_color == 'w' else 'w',
+                                     user_color=self.current_color)
+        
+        # If user color is Black, flip pieces
+        if self.current_color == 'b':
+            pieces = pieces[::-1, ::-1]
+
+        # Update chessboard pieces
+        self.chessboard.pieces = pieces
 
         if pieces is not None:
             self.chessboard.update_board(pieces)
 
-            self.move1.setText(move)
-            self.move2.setText(move)
-            self.move3.setText(move)
+            self.move1.setText(f"1. {moves[0]['Move']}")
+            self.move2.setText(f"2. {moves[1]['Move']}")
+            self.move3.setText(f"3. {moves[2]['Move']}")
 
     def getPredictedMove(self):
         stockfish.get_fen_position().split(' ')[-1]
 
-        move,pieces = pipeline.run_pipeline(board_detector,
+        moves, pieces = pipeline.run_pipeline(board_detector,
                                      piece_classifier, 
                                      stockfish,
-                                     active_color=current_color,
-                                     user_color=current_color)
+                                     active_color=self.current_color,
+                                     user_color=self.current_color)
+        
+        # If user color is Black, flip pieces
+        if self.current_color == 'b':
+            pieces = pieces[::-1, ::-1]
+        
+        # Update chessboard pieces
+        self.chessboard.pieces = pieces
 
         if pieces is not None:
             self.chessboard.update_board(pieces)
 
-            self.move1.setText(move)
-            self.move2.setText(move)
-            self.move3.setText(move)
+            self.move1.setText(f"1. {moves[0]['Move']}")
+            self.move2.setText(f"2. {moves[1]['Move']}")
+            self.move3.setText(f"3. {moves[2]['Move']}")
 
 
 if __name__ == "__main__":

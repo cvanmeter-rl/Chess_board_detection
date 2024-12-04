@@ -456,14 +456,15 @@ def run_pipeline(board_detector: YOLO,
     apply_move = update_stockfish(stockfish, pieces, active_color, user_color)
 
     # -- Generate the best move from Stockfish
-    move = stockfish.get_best_move()
+    # move = stockfish.get_best_move()
+    moves = stockfish.get_top_moves()
 
     # -- If apply_move == True, apply the move to Stockfish's game state
     if apply_move:
-        stockfish.make_moves_from_current_position([move])
+        stockfish.make_moves_from_current_position([moves[0]['Move']])
         print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
 
-    return move, pieces
+    return moves, pieces
 
 
 def main():
