@@ -38,8 +38,10 @@ def preprocess_square(square):
 
     square = data_transforms(square)
     square = square.unsqueeze(0)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    return square
+
+    return square.to(device)
 
 
 def detect_board(board_detector: YOLO, screenshot: np.ndarray) -> np.ndarray:
@@ -432,7 +434,7 @@ def run_pipeline(board_detector: YOLO,
     board = detect_board(board_detector, screenshot)
 
     if board is None:
-        return None
+        return None, None
 
     '''
     Classify Pieces
@@ -461,7 +463,7 @@ def run_pipeline(board_detector: YOLO,
         stockfish.make_moves_from_current_position([move])
         print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
 
-    return move
+    return move, pieces
 
 
 def main():

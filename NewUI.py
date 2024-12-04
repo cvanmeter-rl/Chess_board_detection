@@ -4,13 +4,33 @@ from PyQt5.QtWidgets import (QLabel, QGridLayout, QApplication, QMainWindow, QPu
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 
+import pipeline
+
+import cv2
+from PIL import Image
+import numpy as np
+# -- PyTorch
+from torchvision import transforms
+import torch
+import torch.nn.functional as F
+# -- Models
+from ultralytics import YOLO
+from torchvision.models.resnet import ResNet
+from stockfish import Stockfish
+# -- Utils
+import pyautogui
+from skimage.util import view_as_blocks
+import msvcrt
+
+current_color = 'w' #keeps track of users piece color
+
 black_side = [
     ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
     ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
     ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
 ]
@@ -18,10 +38,10 @@ black_side = [
 white_side = [
     ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
     ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
     ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
 ]
@@ -81,7 +101,7 @@ class ChessBoardWidget(QWidget):
         :param board: A 2D list representing the board. Example:
                       [['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
                        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-                       ['.', '.', '.', '.', '.', '.', '.', '.'],
+                       [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
                        ...]
         """
         piece_images = {
@@ -103,8 +123,8 @@ class ChessBoardWidget(QWidget):
             for col in range(8):
                 piece = board[row][col]
                 square = self.squares[row][col]
-
-                if piece != '.':
+                
+                if (piece != ' '):
                     # Load the corresponding piece image
                     pixmap = QPixmap(piece_images[piece])
                     pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)  # Adjusted size
@@ -195,27 +215,82 @@ class MainWindow(QMainWindow):
         self.toggle_button.toggled.connect(self.toggle_state)
 
     def toggle_state(self, checked):
+
         if checked:  # Black pieces
+            current_color = 'b'
             self.chessboard.update_board(black_side)
             self.toggle_button.setText("Black Pieces")
             self.toggle_button.setStyleSheet("background-color: #3C3F41; color: white;border: 1px solid #555555;")  # Updated color
         else:  # White pieces
+            current_color = 'w'
             self.chessboard.update_board(white_side)
             self.toggle_button.setText("White Pieces")
             self.toggle_button.setStyleSheet("background-color: white; color: black;border: 1px solid #555555;")  # Initial color
 
     # Methods for button actions
     def getOppPredictedMove(self):
-        self.move1.setText("You clicked Opp pred move!")
-        self.move2.setText("You clicked Opp pred move!")
-        self.move3.setText("You clicked Opp pred move!")
+        stockfish.get_fen_position().split(' ')[-1]
+
+        move,pieces = pipeline.run_pipeline(board_detector, 
+                                     piece_classifier, 
+                                     stockfish,
+                                     active_color='b' if current_color == 'w' else 'w',
+                                     user_color=current_color)
+
+        if pieces is not None:
+            self.chessboard.update_board(pieces)
+
+            self.move1.setText(move)
+            self.move2.setText(move)
+            self.move3.setText(move)
 
     def getPredictedMove(self):
-        self.move1.setText("You clicked predicted move!")
-        self.move2.setText("You clicked predicted move!")
-        self.move3.setText("You clicked predicted move()")
+        stockfish.get_fen_position().split(' ')[-1]
+
+        move,pieces = pipeline.run_pipeline(board_detector,
+                                     piece_classifier, 
+                                     stockfish,
+                                     active_color=current_color,
+                                     user_color=current_color)
+
+        if pieces is not None:
+            self.chessboard.update_board(pieces)
+
+            self.move1.setText(move)
+            self.move2.setText(move)
+            self.move3.setText(move)
+
 
 if __name__ == "__main__":
+    '''
+    Load Models
+    '''
+    print("Loading models...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # -- Load YOLO11n chessboard detection model (epoch27.pt)
+    board_detector = YOLO(f'models/board_detector/epoch27.pt')
+    board_detector = board_detector.to(device)
+    # -- Load ResNet-18 piece classification model (classifier_epoch1.pth)
+    
+    piece_classifier = torch.load(f'models/piece_classifier/classifier_epoch1.pth', map_location=device)
+    piece_classifier = piece_classifier.to(device)
+    piece_classifier.eval()
+
+    # -- Load Stockfish17 engine
+    stockfish = Stockfish(
+        path='models/stockfish/stockfish-windows-x86-64-avx2.exe',
+        depth=24,
+        parameters={
+            "Threads" : 4,
+            "Hash" : 2048,
+            "Skill Level" : 20
+        }
+    )
+
+    print("Models successfully loaded.\n")
+
+
     app = QApplication(sys.argv)
     # Apply a dark theme using QSS
     dark_style = """
