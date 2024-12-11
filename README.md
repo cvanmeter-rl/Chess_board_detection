@@ -13,3 +13,4 @@
    - cv2
    - pyautogui
 3. Run NewUI.py and you are all set
+## All other files were used either for data preprocessing or model training/testing
