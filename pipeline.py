@@ -462,7 +462,7 @@ def run_pipeline(board_detector: YOLO,
     # -- If apply_move == True, apply the move to Stockfish's game state
     if apply_move:
         stockfish.make_moves_from_current_position([moves[0]['Move']])
-        print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
+        #print(f"Updated Stockfish Board:\n{stockfish.get_board_visual(perspective_white=(user_color=='w'))}")
 
     return moves, pieces
 
